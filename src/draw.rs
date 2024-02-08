@@ -47,13 +47,15 @@ impl Origin{
         Origin { x: x, y: y }
     }
 
-    pub fn new_adjust(&self, x: f32, y: f32) -> Point {
-        Point::new(x + self.x, y + self.y)
+    pub fn offset(&self, p: Point) -> Self {
+        let p = Point::new(p.x + self.x, p.y + self.y);
+        Origin { x: p.x, y: p.y }
     }
 
-    pub fn new_origin(&self, p: Point) -> Self {
-        let p = self.new_adjust(p.x, p.y);
-        Origin { x: p.x, y: p.y }
+    pub fn within_range (&self, other: &Self, range: f32) -> bool{
+        let dist = ((other.x - self.x).powi(2) + (other.y - self.y).powi(2)).sqrt();
+        dist >= -range && dist <= range
+
     }
 
 }
@@ -71,8 +73,8 @@ impl Line{
 
     pub fn get_path(&self, origin: &Origin) -> Path {
         let mut pb = PathBuilder::new();
-        let p1 = origin.new_origin(self.p1);
-        let p2 = origin.new_origin(self.p2);
+        let p1 = origin.offset(self.p1);
+        let p2 = origin.offset(self.p2);
         pb.move_to(p1.x, p1.y);
         pb.line_to(p2.x, p2.y);
 
@@ -154,22 +156,18 @@ impl Circle {
                    self.center.y + (self.angle.sin() * (self.radius - off_rad)))
     }
 
-    pub fn create_path(&self, origin: &Origin, incr: u32) -> Path {
-        let origin = origin.new_origin(self.center);
+    pub fn create_path(&self, origin: &Origin, incr: f32) -> Path {
+        let origin = origin.offset(self.center);
         let mut circ = self.clone();
 
-        let sweep_pec = circ.angle / (2.0*PI);
-        let sweep = (incr as f32 * sweep_pec) as u32;
-        let incr = circ.angle / sweep as f32;
-
         let mut pb = PathBuilder::new();
-        let current = origin.new_adjust(circ.radius, 0.);
+        let current = origin.offset(Point::new(circ.radius, 0.));
         pb.move_to(current.x, current.y);
 
         circ.angle = 0.0;
         while circ.angle < self.angle {
             circ.angle += incr;
-            let current = origin.new_origin(circ.get_offset_point(0.));
+            let current = origin.offset(circ.get_offset_point(0.));
             pb.line_to(current.x, current.y);
         };
 
@@ -194,7 +192,7 @@ impl SpiroGraph{
         }
     }
 
-    pub fn draw_border(&self, canvas: &mut Canvas, stroke: &StrokeStyle, color: &Source<'_>, incr: u32){
+    pub fn draw_border(&self, canvas: &mut Canvas, stroke: &StrokeStyle, color: &Source<'_>, incr: f32){
        canvas.draw(
             &self.outer.create_path(&canvas.origin, incr),
             &color,
@@ -202,9 +200,7 @@ impl SpiroGraph{
         );
     }
 
-    pub fn draw(&self, canvas: &mut Canvas, stroke: &StrokeStyle, color: &Source<'_>, pen_off: f32, incr: u32) {
-        let sweep = PI * 100.;
-        let incr = sweep / incr as f32;
+    pub fn draw(&self, canvas: &mut Canvas, stroke: &StrokeStyle, color: &Source<'_>, pen_off: f32, incr: f32, range: f32) {
 
         let mut circ_out = self.outer.clone();
         let mut circ_in = self.inner.clone();
@@ -213,19 +209,25 @@ impl SpiroGraph{
         circ_in.angle = 0.;
         circ_in.center =circ_out.get_offset_point(self.inner.radius);
 
-        let origin = canvas.origin.new_origin(circ_out.center);
+        let origin = canvas.origin.offset(circ_out.center);
         let mut pb = PathBuilder::new();
-        let current = origin.new_origin(circ_in.get_offset_point(pen_off));
-        pb.move_to(current.x, current.y);
+        let begin = origin.offset(circ_in.get_offset_point(pen_off));
+        pb.move_to(begin.x, begin.y);
 
-        while circ_out.angle > -(sweep) {
+        loop {
             circ_in.angle += incr;
             circ_out.set_angle_by_arc(-circ_in.get_arc_len());
             circ_in.center = circ_out.get_offset_point(self.inner.radius);
 
-            let current = origin.new_origin(circ_in.get_offset_point(pen_off));
+            let current = origin.offset(circ_in.get_offset_point(pen_off));
             pb.line_to(current.x, current.y);
+
+            if circ_out.angle < -(PI * 2.) &&  current.within_range(&begin, range) {
+                break;
+            }
         }
+
+        println!("rotations: {}", circ_out.angle / (PI * 2.));
 
         canvas.draw(
             &pb.finish(),

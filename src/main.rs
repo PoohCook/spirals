@@ -1,12 +1,8 @@
 extern crate raqote;
-use std::f32::consts::PI;
-
 use raqote::*;
 
 mod draw;
 use draw::{*};
-
-
 
 struct Pallet<'a> {
     black: Source<'a>,
@@ -64,13 +60,14 @@ fn main() {
     cross.draw(&mut canvas, &pallet.white, &line_stroke);
 
     let outer_radius: f32 = 350.;
-    let inner_radius: f32 = 145.;
-    let pen_off = 15.;
-    let incr = 10000;
+    let inner_radius: f32 = 250.;
+    let pen_off = 50.;
+    let incr: f32 = 0.005;
+    let range = 1.0;
 
     let spiral = SpiroGraph::new(Point::new(0., 0.), outer_radius, inner_radius);
     spiral.draw_border(&mut canvas, &line_stroke, &pallet.green, incr);
-    spiral.draw(&mut canvas, &line_stroke, &pallet.yellow, pen_off, incr);
+    spiral.draw(&mut canvas, &line_stroke, &pallet.yellow, pen_off, incr, range);
 
     canvas.write_png("example.png");
 
